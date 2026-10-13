@@ -50,18 +50,28 @@ tablero_inicial: tuple = (
     [TN, CN, AN, DN, RN, AN, CN, TN]    # Fila de piezas negras específicas.
 )
 
+# Creación de una lista con todos los ID de casillas válidas para poder comprobar rápidamente si una casilla existe en el tablero mediante una función.
+
 """
 ID de cada casilla del tablero como guía, las casillas se almacenan de esta manera internamente en el código
    A  B  C  D  E  F  G  H
-8  00 10 20 30 40 50 60 70
-7  01 11 21 31 41 51 61 71
-6  02 12 22 32 42 52 62 72
-5  03 13 23 33 43 53 63 73
-4  04 14 24 34 44 54 64 74
-3  05 15 25 35 45 55 65 75
-2  06 16 26 36 46 56 66 76
-1  07 17 27 37 47 57 67 77
+8  07 17 27 37 47 57 67 77
+7  06 16 26 36 46 56 66 76
+6  05 15 25 35 45 55 65 75
+5  04 14 24 34 44 54 64 74
+4  03 13 23 33 43 53 63 73
+3  02 12 22 32 42 52 62 72
+2  01 11 21 31 41 51 61 71
+1  00 10 20 30 40 50 60 70
 """
+
+casillas_ID_perm: list = []
+for i in range(8):
+    for j in range(8):
+        casillas_ID_perm.append(str(i)+str(j))
+
+def _comprobar_casilla_ID(c1):
+    return c1 in casillas_ID_perm
 
 # Declaración del tablero inicial modificable para la partida.
 tablero: list = list(tablero_inicial)
@@ -90,7 +100,7 @@ def _cambiar_turno():
 casillas_mov_perm: list = []
 
 # Función que devuelve el color de la pieza
-def _color_pieza(p):
+def _color_pieza(p: str):
     global piezas_blancas
     global piezas_negras
     if p in piezas_blancas:
@@ -100,41 +110,91 @@ def _color_pieza(p):
     else:
         return "vacío"
 
+# Función que devuelve la pieza en cierta casilla
+def _pieza_en_casilla(c1: str):
+    global tablero
+    return tablero[int(c1[1])][int(c1[0])]
+
 # Función para mover una pieza de una casilla a otra
-def _mover_pieza(c1, c2):
+def _mover_pieza(c1: str, c2: str):
     global tablero
     global casillas_mov_perm
     casillas_mov_perm = []
-    pieza = tablero[int(c1[1])][int(c1[0])]
-    tablero[int(c2[1])][int(c2[0])] = pieza
-    tablero[int(c1[1])][int(c1[0])] = "·"
+    pieza = _pieza_en_casilla(c1)
+    if _mov_valido(c1, c2, pieza):
+        tablero[int(c2[1])][int(c2[0])] = pieza
+        tablero[int(c1[1])][int(c1[0])] = "·"
+        _cambiar_turno()
 
 # Función que dirige el código a la comprobación del movimiento de pieza necesaria y si es posible realizarlo
-def _mov_valido(c1, c2, p):
+def _mov_valido(c1: str, c2: str, p: str):
     global estado
     if _color_pieza(p) == "vacío":      # Comprobación de que se ha seleccionado una pieza y no una casilla vacía
-        print("La casilla está vacía, selecciona una casilla válida para mover la pieza.")
+        print("No hay ninguna pieza en la casilla de origen.")
         return False
     elif _color_pieza(p) != estado:     # Comprobación de que el color de la pieza es del jugador al que le toca
-        print("Selecciona una pieza de las " + estado + ".")
+        print("Esa pieza no es tuya, es el turno de las " + estado + ".")
         return False
+    elif c1 == c2:
+        print("El origen y el destino son la misma casilla.")
+        return False
+    elif _color_pieza(_pieza_en_casilla(c1)) == _color_pieza(_pieza_en_casilla(c2)):
+        print("La casilla de destino está ocupada por una pieza propia.")
+        return False
+    else:
+        if p == TB or p == TN:
+            resultado = _comp_torre(c1, c2)
+            if resultado == False:
+                print("Movimiento no válido, selecciona un movimiento válido para la torre.")
+            return resultado
+        return True
 
 # Cúmulo de funciones para comprobar los movimientos de las diferentes piezas.
-def _comp_torre(c1, c2):
-    for i in range(7):
-        print("")
-        
-    
+"""
+Las funciones siguientes son algo complejas por lo que precisaré en cada una individualmente cuando sea necesario.
+
+El objetivo de las funciones es comprobar que el la pieza puede desplazarse desde c1 hasta c2, devolviendo True si ese es el caso.
+Hay una función para cada pieza a excepción de para la dama, puesto que es la combinación de la torre y el alfil.
+En la función _mov_válido se decide cuál de las funciones es la necesaria dependiendo de la pieza.
+"""
+
+def _comp_torre(c1: str, c2: str) -> bool:
+    global estado
+    global casillas_mov_perm
+
+    """
+    Para la comprobación de la torre, simulamos el avance de la torre en las 4 direcciones cardinales, expresadas con la lista [1, -1, 10, -10]
+    La c se le multiplica a la i para determinar la dirección y el sentido en cada una de las 4 iteraciones del bucle completo.
+    Al multiplicar por c=1 o c=-1 se simula el cambio de fila hacia el Norte y hacia el Sur, respectivamente.
+    Al multiplicar por c=10 o c=-10 se simula el cambio de columna hacia el Este y hacia el Oeste, respectivamente.
+    Cuando se topa con una pieza, el bulce se detiene y se pasa a la siguiente dirección cardinal.
+    """
+    # Comprobación de las 4 direcciones
+    for c in [1, -1, 10, -10]:
+        for i in range(1, 8):
+            casilla_a_comprobar = str(int(c1) + i*c)
+            if _comprobar_casilla_ID(casilla_a_comprobar) == False:     # Comprobación de que el ID de la casilla es válido
+                break
+            elif _pieza_en_casilla(casilla_a_comprobar) == "·":         # Si la casilla está vacía, se añade a la lista de movimientos permitidos, si no la pieza no puede seguir avanzando y se detiene el bucle para esta dirección
+                casillas_mov_perm.append(casilla_a_comprobar)
+            else:                                                       # La condición siguiente sirve para filtrar el caso en el que el programa se topa con una casilla que tiene una pieza de color opuesto, de manera que la captura.
+                if (estado == "blancas" and _pieza_en_casilla(casilla_a_comprobar) in piezas_negras) or (estado == "negras" and _pieza_en_casilla(casilla_a_comprobar) in piezas_blancas):
+                    casillas_mov_perm.append(casilla_a_comprobar)
+                break
+
+    # Devolución de un bool que indica si el movimiento final es legal o no
+    return c2 in casillas_mov_perm
+
 # Declaración de la función que pone en marcha la máquina de estados para comenzar la partida.
 def _comenzar_partida():
+    global estado
     _imprimir_tablero()
     user_input: str = ""
     casilla_1: str = "."
     casilla_2: str = "."
-    global estado
     while user_input != "salir":
         print("Turno de las", estado + ".")
-        user_input = input("Introduce un movimiento válido o escribe 'salir' para finalizar: ")
+        user_input = input("Introduce un movimiento válido o escribe 'salir' para finalizar: ").lower()
 
         if user_input == "salir":
             estado = "salir"
@@ -143,12 +203,11 @@ def _comenzar_partida():
             casilla_1 = str(letras_perm.find(user_input[0])) + str(numeros_perm.find(user_input[1]))
             casilla_2 = str(letras_perm.find(user_input[3])) + str(numeros_perm.find(user_input[4]))
             _mover_pieza(casilla_1, casilla_2)
+            print("")
             _imprimir_tablero()
-            _cambiar_turno()
 
         else:
-            print("Comando no válido.")
-        print("")
+            print("Formato no válido. Escribe origen y destino, por ejemplo: e2 e4")
 
 # Comienzo del programa
 _comenzar_partida()
