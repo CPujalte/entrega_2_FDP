@@ -39,7 +39,6 @@ class Tablero:
             fila_vacia: list[Pieza | None] = [None] * 8
             self.casillas.append(fila_vacia)
 
-        # Lista con todos los ID de casillas validas y sus respectivas posiciones.
         """
         ID de cada casilla del tablero como guia, las casillas se almacenan de esta manera internamente en el codigo
         A  B  C  D  E  F  G  H
@@ -57,17 +56,20 @@ class Tablero:
     def colocar(self, pieza: Pieza, casilla: str) -> None:
         self.casillas[int(casilla[1])][int(casilla[0])] = pieza
 
+
     # Metodo para obtener la pieza en cierta casilla
     def pieza_en_casilla(self, casilla: str) -> Pieza | None:
         if self.casillas[int(casilla[1])][int(casilla[0])] != None:
             return self.casillas[int(casilla[1])][int(casilla[0])]
         else: return None
 
+
     # Metodo para comprobar la existencia de cierta casilla
     def existe_casilla(self, casilla: str) -> bool:
         if casilla[0] in "01234567" and casilla[1] in "01234567":
             return True
         else: return False
+
 
     # Metodo para imprimir el tablero
     def imprimir_tablero(self) -> None:
@@ -83,6 +85,7 @@ class Tablero:
                 print(contenido, end = " ")
             print("")
         print("")
+
 
     # Metodo para reemplazar el tablero por un tablero en la posicion inicial
     def reiniciar(self) -> None:
@@ -113,11 +116,18 @@ class Tablero:
             columna_a_colocar = 0
             fila_a_colocar += 1
 
+
     # Metodo para mover una pieza de una casilla a otra
     def mover_pieza(self, casilla_inicio: str, casilla_llegada: str, verificar_movimiento: bool = True) -> None:
         pieza: Pieza | None = self.pieza_en_casilla(casilla_inicio)
-        global estado
         validez_movimiento: bool = True
+        tablero_inicial: Tablero = self
+        color_opuesto: str
+
+        if pieza.color == "blanco":
+            color_opuesto = "negro"
+        else:
+            color_opuesto = "blanco"
 
         if verificar_movimiento == True:
             validez_movimiento = self.es_movimiento_valido(casilla_inicio, casilla_llegada)
@@ -128,32 +138,45 @@ class Tablero:
             if isinstance(pieza, Peon):
                 self.comprobar_coronacion(casilla_llegada)
 
+            if verificar_movimiento and self.rey_en_jaque(pieza.color) == True:
+                self = tablero_inicial
+                raise ValueError("Ese movimiento deja a tu propio rey en jaque.")
+
+            if self.casilla_de_rey(color_opuesto) in self.pieza_en_casilla(casilla_llegada).movimientos_posibles(casilla_llegada):
+                print("Rey", color_opuesto, "en jaque.")
+
+
     # Metodo para comprobar la validez de cierto movimiento
-    def es_movimiento_valido(self, casilla_inicio: str, casilla_llegada: str, comp_jaque: bool = True) -> bool:
+    def es_movimiento_valido(self, casilla_inicio: str, casilla_llegada: str) -> bool:
         global estado
         pieza: Pieza | None = self.pieza_en_casilla(casilla_inicio)
         validez_movimiento: bool = True
 
         if pieza == None:
-            print("No hay ninguna pieza en la casilla de origen")
-            validez_movimiento = False
+            raise ValueError("No hay ninguna pieza en la casilla de origen.")
+        
         elif (pieza.color == "blanco" and estado == "turno_negras") or (pieza.color == "negro" and estado == "turno_blancas"):
-            print("Esa pieza no es tuya, es el turno del " + estado + ".")
-            validez_movimiento = False
+            color_turno: str
+            if estado == "turno_blancas":
+                color_turno = "blancas"
+            else:
+                color_turno = "negras"
+            raise ValueError("Esa pieza no es tuya, es el turno de las", color_turno, ".")
+        
         elif casilla_inicio == casilla_llegada:
-            print("El origen y el destino son la misma casilla.")
-            validez_movimiento = False
+            raise ValueError("El origen y el destino son la misma casilla.")
+        
         elif self.pieza_en_casilla(casilla_llegada) != None and pieza.color == self.pieza_en_casilla(casilla_llegada).color:
-            print("La casilla de destino está ocupada por una pieza propia.")
-            validez_movimiento = False
-        else:
-            print(casilla_inicio, casilla_llegada)
-            validez_movimiento: bool = casilla_llegada in pieza.movimientos_posibles(casilla_inicio, comp_jaque)
+            raise ValueError("La casilla de destino está ocupada por una pieza propia.")
+        
+        elif casilla_llegada not in pieza.movimientos_posibles(casilla_inicio):
+            raise ValueError("Movimiento no valido para esta pieza (", pieza.nombre, ").")
 
-        return validez_movimiento
+        else: return True
+
 
     # Metodo para comprobar si se ha coronado
-    def comprobar_coronacion(self, casilla_llegada: str | None = None):
+    def comprobar_coronacion(self, casilla_llegada: str | None = None) -> None:
         if isinstance(casilla_llegada, Peon):
             self.colocar(Dama(self.pieza_en_casilla(casilla_llegada).color), casilla_llegada)
         else:
@@ -163,14 +186,49 @@ class Tablero:
                     if isinstance(self.pieza_en_casilla(casilla_a_comprobar), Peon):
                         self.colocar(Dama(self.pieza_en_casilla(casilla_a_comprobar).color), casilla_a_comprobar)
 
+
+    # Metodo para encontrar la casilla en la que se encuentra el rey de cierto color
+    def casilla_de_rey(self, color):
+        for fila in range(8):
+            for columna in range(8):
+                casilla_a_comprobar: str = str(columna) + str(fila)
+                pieza: Pieza | None = self.pieza_en_casilla(casilla_a_comprobar)
+                if isinstance(pieza, Rey):
+                    if pieza.color == color:
+                        return(casilla_a_comprobar)
+
+
+    # Metodo para comprobar si el rey de cierto color está en jaque
+    def rey_en_jaque(self, color) -> bool:
+        color_rey_comprobacion: str = color
+        color_piezas_amenaza: str
+        casilla_rey: str = self.casilla_de_rey(color_rey_comprobacion)
+
+        if color_rey_comprobacion == "blanco":
+            color_piezas_amenaza = "negro"
+        else:
+            color_piezas_amenaza = "blanco"
+
+        for fila in range(8):
+            for columna in range(8):
+                casilla_a_comprobar: str = str(columna) + str(fila)
+                pieza: Pieza | None = self.pieza_en_casilla(casilla_a_comprobar)
+                if isinstance(pieza, Pieza):
+                    if color_piezas_amenaza == pieza.color:
+                        if casilla_rey in pieza.movimientos_posibles(casilla_a_comprobar):
+                            return True     # Si la casilla del rey esta amenazada, se devuelve True
+
+        return False    # En caso de no encontrar ninguna pieza que haga jaque, se devuelve False              
+
 # Creacion de la clase Peon
 class Peon(Pieza):
 
     def __init__(self, color: str) -> None:
         super().__init__("peon", color)
 
+
     # Metodo para comprobar los movimientos posibles para una torre
-    def movimientos_posibles(self, casilla: str, comp_jaque: bool = True) -> list[str]:
+    def movimientos_posibles(self, casilla: str) -> list[str]:
         casillas_mov_perm: list[str] = []
 
         # Determinacion del sentido hacia el cual el peon se debe dirigir dependiendo de su color
@@ -183,8 +241,8 @@ class Peon(Pieza):
         casilla_a_comprobar = str(int(casilla) + 1*peon_sentido)
         if len(casilla_a_comprobar) == 1 and int(casilla_a_comprobar) >= 0:
             casilla_a_comprobar = "0" + casilla_a_comprobar
-        if tablero.existe_casilla(casilla_a_comprobar):
-            if tablero.pieza_en_casilla(casilla_a_comprobar) == None:
+        if tablero_main.existe_casilla(casilla_a_comprobar):
+            if tablero_main.pieza_en_casilla(casilla_a_comprobar) == None:
                 casillas_mov_perm.append(casilla_a_comprobar)
                 
                 # Comprobación de la posibilidad del salto doble del peon en caso de que puede moverse un espacio hacia delante
@@ -192,8 +250,8 @@ class Peon(Pieza):
                     casilla_a_comprobar = str(int(casilla) + 2*peon_sentido)
                     if len(casilla_a_comprobar) == 1 and int(casilla_a_comprobar) >= 0:
                         casilla_a_comprobar = "0" + casilla_a_comprobar
-                    if tablero.existe_casilla(casilla_a_comprobar):
-                        if tablero.pieza_en_casilla(casilla_a_comprobar) == None:
+                    if tablero_main.existe_casilla(casilla_a_comprobar):
+                        if tablero_main.pieza_en_casilla(casilla_a_comprobar) == None:
                             casillas_mov_perm.append(casilla_a_comprobar)
 
         # Comprobación de la posible captura del peon
@@ -201,8 +259,8 @@ class Peon(Pieza):
             casilla_a_comprobar = str(int(casilla) + 1*peon_sentido + 10*i)
             if len(casilla_a_comprobar) == 1 and int(casilla_a_comprobar) >= 0:
                 casilla_a_comprobar = "0" + casilla_a_comprobar
-            if tablero.existe_casilla(casilla_a_comprobar):
-                if tablero.pieza_en_casilla(casilla_a_comprobar) != None and tablero.pieza_en_casilla(casilla_a_comprobar).color != self.color:
+            if tablero_main.existe_casilla(casilla_a_comprobar):
+                if tablero_main.pieza_en_casilla(casilla_a_comprobar) != None and tablero_main.pieza_en_casilla(casilla_a_comprobar).color != self.color:
                     casillas_mov_perm.append(casilla_a_comprobar)
         
         return casillas_mov_perm
@@ -213,8 +271,9 @@ class Caballo(Pieza):
     def __init__(self, color: str) -> None:
         super().__init__("caballo", color)
 
+
     # Metodo para comprobar los movimientos posibles para un caballo
-    def movimientos_posibles(self, casilla: str, comp_jaque: bool = True) -> list[str]:
+    def movimientos_posibles(self, casilla: str) -> list[str]:
         casillas_mov_perm: list[str] = []
         for n in [1, -1]:
             for m in [1, -1]:
@@ -222,10 +281,10 @@ class Caballo(Pieza):
                     casilla_a_comprobar = str(int(casilla) + i*n + 10*(3-i)*m)
                     if len(casilla_a_comprobar) == 1 and int(casilla_a_comprobar) >= 0:
                         casilla_a_comprobar = "0" + casilla_a_comprobar
-                    if tablero.existe_casilla(casilla_a_comprobar):
-                        if tablero.pieza_en_casilla(casilla_a_comprobar) == None:
+                    if tablero_main.existe_casilla(casilla_a_comprobar):
+                        if tablero_main.pieza_en_casilla(casilla_a_comprobar) == None:
                             casillas_mov_perm.append(casilla_a_comprobar)
-                        elif tablero.pieza_en_casilla(casilla_a_comprobar).color != tablero.pieza_en_casilla(casilla).color:
+                        elif tablero_main.pieza_en_casilla(casilla_a_comprobar).color != tablero_main.pieza_en_casilla(casilla).color:
                             casillas_mov_perm.append(casilla_a_comprobar)
         return casillas_mov_perm
 
@@ -235,8 +294,9 @@ class Alfil(Pieza):
     def __init__(self, color: str) -> None:
         super().__init__("alfil", color)
 
+
     # Metodo para comprobar los movimientos posibles para un alfil
-    def movimientos_posibles(self, casilla: str, comp_jaque: bool = True) -> list[str]:
+    def movimientos_posibles(self, casilla: str) -> list[str]:
         casillas_mov_perm: list[str] = []
         for n in [1, -1]:
             for m in [1, -1]:
@@ -244,12 +304,12 @@ class Alfil(Pieza):
                     casilla_a_comprobar = str(int(casilla) + i*n + 10*i*m)
                     if len(casilla_a_comprobar) == 1 and int(casilla_a_comprobar) >= 0:
                         casilla_a_comprobar = "0" + casilla_a_comprobar
-                    if not tablero.existe_casilla(casilla_a_comprobar):
+                    if not tablero_main.existe_casilla(casilla_a_comprobar):
                         break
-                    elif tablero.pieza_en_casilla(casilla_a_comprobar) == None:
+                    elif tablero_main.pieza_en_casilla(casilla_a_comprobar) == None:
                         casillas_mov_perm.append(casilla_a_comprobar)
                     else:
-                        if tablero.pieza_en_casilla(casilla_a_comprobar).color != tablero.pieza_en_casilla(casilla).color:
+                        if tablero_main.pieza_en_casilla(casilla_a_comprobar).color != tablero_main.pieza_en_casilla(casilla).color:
                             casillas_mov_perm.append(casilla_a_comprobar)
                         break
         return casillas_mov_perm
@@ -260,20 +320,21 @@ class Torre(Pieza):
     def __init__(self, color: str) -> None:
         super().__init__("torre", color)
 
+
     # Metodo para comprobar los movimientos posibles para una torre
-    def movimientos_posibles(self, casilla: str, comp_jaque: bool = True) -> list[str]:
+    def movimientos_posibles(self, casilla: str) -> list[str]:
         casillas_mov_perm: list[str] = []
         for n in [1, -1, 10, -10]:
             for i in range(1, 8):
                 casilla_a_comprobar: str = str(int(casilla) + i*n)
                 if len(casilla_a_comprobar) == 1 and int(casilla_a_comprobar) >= 0:
                     casilla_a_comprobar = "0" + casilla_a_comprobar
-                if not tablero.existe_casilla(casilla_a_comprobar):
+                if not tablero_main.existe_casilla(casilla_a_comprobar):
                     break
-                elif tablero.pieza_en_casilla(casilla_a_comprobar) == None:
+                elif tablero_main.pieza_en_casilla(casilla_a_comprobar) == None:
                     casillas_mov_perm.append(casilla_a_comprobar)
                 else:
-                    if tablero.pieza_en_casilla(casilla_a_comprobar).color != tablero.pieza_en_casilla(casilla).color:
+                    if tablero_main.pieza_en_casilla(casilla_a_comprobar).color != tablero_main.pieza_en_casilla(casilla).color:
                         casillas_mov_perm.append(casilla_a_comprobar)
                     break
         return casillas_mov_perm
@@ -284,12 +345,13 @@ class Dama(Pieza):
     def __init__(self, color: str) -> None:
         super().__init__("dama", color)
 
+
     # Metodo para comprobar los movimientos posibles para una dama combinando las funciones de la torre y el alfil
-    def movimientos_posibles(self, casilla: str, comp_jaque: bool = True) -> list[str]:
+    def movimientos_posibles(self, casilla: str) -> list[str]:
         casillas_mov_perm: list[str] = []
         dama_torre = Torre(self.color)
         dama_alfil = Alfil(self.color)
-        casillas_mov_perm = dama_torre.movimientos_posibles(casilla, comp_jaque) + dama_alfil.movimientos_posibles(casilla, comp_jaque)
+        casillas_mov_perm = dama_torre.movimientos_posibles(casilla) + dama_alfil.movimientos_posibles(casilla)
         return casillas_mov_perm
 
 # Creacion de la clase Rey
@@ -298,8 +360,9 @@ class Rey(Pieza):
     def __init__(self, color: str) -> None:
         super().__init__("rey", color)
 
+
     # Metodo para comprobar los movimientos posibles para un rey
-    def movimientos_posibles(self, casilla: str, comp_jaque: bool = True) -> list[str]:
+    def movimientos_posibles(self, casilla: str) -> list[str]:
         casillas_mov_perm: list[str] = []
         for i in range(-1, 2):
             for j in range(-1, 2):
@@ -308,62 +371,72 @@ class Rey(Pieza):
                 casilla_a_comprobar: str = str(int(casilla) + i + 10*j)
                 if len(casilla_a_comprobar) == 1 and int(casilla_a_comprobar) >= 0:
                     casilla_a_comprobar = "0" + casilla_a_comprobar
-                if tablero.existe_casilla(casilla_a_comprobar):
-                    if tablero.pieza_en_casilla(casilla_a_comprobar) == None:
+                if tablero_main.existe_casilla(casilla_a_comprobar):
+                    if tablero_main.pieza_en_casilla(casilla_a_comprobar) == None:
                         casillas_mov_perm.append(casilla_a_comprobar)
-                    elif tablero.pieza_en_casilla(casilla_a_comprobar).color != tablero.pieza_en_casilla(casilla).color:
+                    elif tablero_main.pieza_en_casilla(casilla_a_comprobar).color != tablero_main.pieza_en_casilla(casilla).color:
                         casillas_mov_perm.append(casilla_a_comprobar)
         return casillas_mov_perm
 
+
 # Generacion del tablero inicial
-tablero: Tablero = Tablero()
+tablero_main: Tablero = Tablero()
 
-# Definicion de una funcion para alternar el turno
-estado: str = "turno_blancas"
-
-def _ejecutar_turno() -> None:
+# Definicion de la estructura interna del turno
+def _ejecutar_turno() -> bool | str:
 
     global estado
     user_input: str = ""
     casilla_inicio: str = ""
     casilla_llegada: str = ""
 
-    if estado == "turno_blancas":
-        print("Turno de las blancas.")
-    elif estado == "turno_negras":
-        print("Turno de las negras.")
     user_input = input("Introduce un movimiento valido o escribe 'salir' para finalizar: ").lower()
     print("")
 
     if "salir" == user_input:
         estado = "fin_partida"
+
     elif len(user_input) == 5 and user_input[0] in letras_perm and user_input[1] in numeros_perm and user_input[2] == " " and user_input[3] in letras_perm and user_input[4] in numeros_perm:
         casilla_inicio = str(letras_perm.find(user_input[0])) + str(numeros_perm.find(user_input[1]))
         casilla_llegada = str(letras_perm.find(user_input[3])) + str(numeros_perm.find(user_input[4]))
-        tablero.mover_pieza(casilla_inicio, casilla_llegada)
+        tablero_main.mover_pieza(casilla_inicio, casilla_llegada)
         print("")
-        tablero.imprimir_tablero()
+        tablero_main.imprimir_tablero()
+
     else:
         print("Formato no valido. Escribe origen y destino, por ejemplo: e2 e4")
+
 
 # Definicion de la maquina de estados
 estado: str = "turno_blancas"
 def _comenzar_partida():
 
-    tablero.reiniciar()
-    tablero.imprimir_tablero()
+    tablero_main.reiniciar()
+    tablero_main.imprimir_tablero()
     global estado
     estado = "turno_blancas"
         
     while estado != "fin_partida":
+
         if estado == "turno_blancas":
-            _ejecutar_turno()
-            if estado != "fin_partida":
-                estado = "turno_negras"
+            print("Turno de las blancas.")
+
+            try:
+                _ejecutar_turno()
+                if estado == "turno_blancas":
+                    estado = "turno_negras"
+            except ValueError as error:
+                print(error)
+
         elif estado == "turno_negras":
-            _ejecutar_turno()
-            if estado != "fin_partida":
-                estado = "turno_blancas"
+            print("Turno de las negras.")
+
+            try:
+                _ejecutar_turno()
+                if estado == "turno_negras":
+                    estado = "turno_blancas"
+            except ValueError as error:
+                print(error)
         
 # Comienzo del programa
 _comenzar_partida()
