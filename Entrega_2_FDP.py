@@ -1,5 +1,8 @@
 # ENTREGA 2
 
+# Imports
+import copy
+
 # Declaracion de variables con los caracteres posibles para determinar si las casillas son validas.
 letras_perm: str = "abcdefgh"
 numeros_perm: str = "12345678"
@@ -118,19 +121,14 @@ class Tablero:
 
 
     # Metodo para mover una pieza de una casilla a otra
-    def mover_pieza(self, casilla_inicio: str, casilla_llegada: str, verificar_movimiento: bool = True) -> None:
+    def mover_pieza(self, casilla_inicio: str, casilla_llegada: str, verificar_movimiento: bool = True, comp_jaque: bool = False) -> None:
         pieza: Pieza | None = self.pieza_en_casilla(casilla_inicio)
         validez_movimiento: bool = True
-        tablero_inicial: Tablero = self
-        color_opuesto: str
-
-        if pieza.color == "blanco":
-            color_opuesto = "negro"
-        else:
-            color_opuesto = "blanco"
+        tablero_inicial = Tablero()
+        tablero_inicial.casillas = copy.deepcopy(self.casillas)
 
         if verificar_movimiento == True:
-            validez_movimiento = self.es_movimiento_valido(casilla_inicio, casilla_llegada)
+            validez_movimiento = self.es_movimiento_valido(casilla_inicio, casilla_llegada, comp_jaque)
 
         if validez_movimiento == True:
             self.colocar(pieza, casilla_llegada)
@@ -138,16 +136,13 @@ class Tablero:
             if isinstance(pieza, Peon):
                 self.comprobar_coronacion(casilla_llegada)
 
-            if verificar_movimiento and self.rey_en_jaque(pieza.color) == True:
-                self = tablero_inicial
+            if verificar_movimiento and self.comprobar_rey_en_jaque(pieza.color) == True:
+                self.casillas = copy.deepcopy(tablero_inicial.casillas)
                 raise ValueError("Ese movimiento deja a tu propio rey en jaque.")
-
-            if self.casilla_de_rey(color_opuesto) in self.pieza_en_casilla(casilla_llegada).movimientos_posibles(casilla_llegada):
-                print("Rey", color_opuesto, "en jaque.")
 
 
     # Metodo para comprobar la validez de cierto movimiento
-    def es_movimiento_valido(self, casilla_inicio: str, casilla_llegada: str) -> bool:
+    def es_movimiento_valido(self, casilla_inicio: str, casilla_llegada: str, comp_jaque: bool = False) -> bool:
         global estado
         pieza: Pieza | None = self.pieza_en_casilla(casilla_inicio)
         validez_movimiento: bool = True
@@ -155,13 +150,13 @@ class Tablero:
         if pieza == None:
             raise ValueError("No hay ninguna pieza en la casilla de origen.")
         
-        elif (pieza.color == "blanco" and estado == "turno_negras") or (pieza.color == "negro" and estado == "turno_blancas"):
+        elif not comp_jaque and (pieza.color == "blanco" and estado == "turno_negras") or (pieza.color == "negro" and estado == "turno_blancas"):
             color_turno: str
             if estado == "turno_blancas":
                 color_turno = "blancas"
             else:
                 color_turno = "negras"
-            raise ValueError("Esa pieza no es tuya, es el turno de las", color_turno, ".")
+            raise ValueError("Esa pieza no es tuya, es el turno de las " + color_turno + ".")
         
         elif casilla_inicio == casilla_llegada:
             raise ValueError("El origen y el destino son la misma casilla.")
@@ -170,7 +165,7 @@ class Tablero:
             raise ValueError("La casilla de destino está ocupada por una pieza propia.")
         
         elif casilla_llegada not in pieza.movimientos_posibles(casilla_inicio):
-            raise ValueError("Movimiento no valido para esta pieza (", pieza.nombre, ").")
+            raise ValueError("Movimiento no valido para esta pieza (" + pieza.nombre + ").")
 
         else: return True
 
@@ -199,7 +194,7 @@ class Tablero:
 
 
     # Metodo para comprobar si el rey de cierto color está en jaque
-    def rey_en_jaque(self, color) -> bool:
+    def comprobar_rey_en_jaque(self, color) -> bool:
         color_rey_comprobacion: str = color
         color_piezas_amenaza: str
         casilla_rey: str = self.casilla_de_rey(color_rey_comprobacion)
@@ -218,7 +213,45 @@ class Tablero:
                         if casilla_rey in pieza.movimientos_posibles(casilla_a_comprobar):
                             return True     # Si la casilla del rey esta amenazada, se devuelve True
 
-        return False    # En caso de no encontrar ninguna pieza que haga jaque, se devuelve False              
+        return False    # En caso de no encontrar ninguna pieza que haga jaque, se devuelve False   
+
+
+    # Método para comprobar si cierto color se encuentra en rey ahogado
+    def comprobar_rey_ahogado(self, color) -> bool:
+        tablero_inicial = Tablero()
+        tablero_inicial.casillas = copy.deepcopy(self.casillas)
+        for fila in range(8):
+            for columna in range(8):
+                casilla_a_comprobar: str = str(columna) + str(fila)
+                pieza: Pieza | None = self.pieza_en_casilla(casilla_a_comprobar)
+
+                if isinstance(pieza, Pieza):
+                    if pieza.color == color:
+                        movimientos_a_comprobar: list[str] = pieza.movimientos_posibles(casilla_a_comprobar)
+
+                        for casilla_llegada in movimientos_a_comprobar:
+                            try:
+                                self.mover_pieza(casilla_a_comprobar, casilla_llegada, comp_jaque = True)
+                                self.casillas = copy.deepcopy(tablero_inicial.casillas)
+                                return False
+                            
+                            except ValueError:
+                                self.casillas = copy.deepcopy(tablero_inicial.casillas)
+        return True
+
+
+    # Método que detecta si cierto color está en jaque o en rey ahogado e imprime un mensaje para el usuario.
+    def analizar_posicion_color(self, color: str) -> str:
+        jaque: bool = self.comprobar_rey_en_jaque(color)
+        rey_ahogado: bool = self.comprobar_rey_ahogado(color)
+        if jaque and rey_ahogado:
+            return "jaque mate"
+        elif jaque:
+            return "jaque"
+        elif rey_ahogado:
+            return "rey ahogado"
+
+
 
 # Creacion de la clase Peon
 class Peon(Pieza):
@@ -227,7 +260,7 @@ class Peon(Pieza):
         super().__init__("peon", color)
 
 
-    # Metodo para comprobar los movimientos posibles para una torre
+    # Metodo para comprobar los movimientos posibles para un peon
     def movimientos_posibles(self, casilla: str) -> list[str]:
         casillas_mov_perm: list[str] = []
 
@@ -265,6 +298,7 @@ class Peon(Pieza):
         
         return casillas_mov_perm
 
+
 # Creacion de la clase Caballo
 class Caballo(Pieza):
 
@@ -287,6 +321,7 @@ class Caballo(Pieza):
                         elif tablero_main.pieza_en_casilla(casilla_a_comprobar).color != tablero_main.pieza_en_casilla(casilla).color:
                             casillas_mov_perm.append(casilla_a_comprobar)
         return casillas_mov_perm
+
 
 # Creacion de la clase Alfil
 class Alfil(Pieza):
@@ -314,6 +349,7 @@ class Alfil(Pieza):
                         break
         return casillas_mov_perm
 
+
 # Creacion de la clase Torre
 class Torre(Pieza):
 
@@ -339,6 +375,7 @@ class Torre(Pieza):
                     break
         return casillas_mov_perm
 
+
 # Creacion de la clase Dama
 class Dama(Pieza):
 
@@ -353,6 +390,7 @@ class Dama(Pieza):
         dama_alfil = Alfil(self.color)
         casillas_mov_perm = dama_torre.movimientos_posibles(casilla) + dama_alfil.movimientos_posibles(casilla)
         return casillas_mov_perm
+
 
 # Creacion de la clase Rey
 class Rey(Pieza):
@@ -415,16 +453,40 @@ def _comenzar_partida():
     tablero_main.imprimir_tablero()
     global estado
     estado = "turno_blancas"
+    color_estado: str = ""
+    nombre_estado: str = ""
+    nombre_opuesto: str = ""
         
     while estado != "fin_partida":
 
         if estado == "turno_blancas":
+            color_estado = "blanco"
+            nombre_estado = "blancas"
+            nombre_opuesto = "negras"
+        elif estado == "turno_negras":
+            color_estado = "negro"
+            nombre_estado = "negras"
+            nombre_opuesto = "blancas"
+
+        posicion_estado: str = tablero_main.analizar_posicion_color(color_estado)
+        if posicion_estado == "jaque":
+            print("Jaque a las " + nombre_estado + ".")
+        elif posicion_estado == "jaque mate":
+            print("Jaque mate. Ganan las " + nombre_opuesto + ", fin de la partida.")
+            estado = "fin_partida"
+        elif posicion_estado == "rey ahogado":
+            print("Rey ahogado a las " + nombre_estado + ", fin de la partida.")
+            estado = "fin_partida"
+        
+        if estado == "turno_blancas":
             print("Turno de las blancas.")
 
-            try:
+            try:    
                 _ejecutar_turno()
+
                 if estado == "turno_blancas":
                     estado = "turno_negras"
+
             except ValueError as error:
                 print(error)
 
@@ -433,8 +495,10 @@ def _comenzar_partida():
 
             try:
                 _ejecutar_turno()
+
                 if estado == "turno_negras":
                     estado = "turno_blancas"
+
             except ValueError as error:
                 print(error)
         
