@@ -5,6 +5,7 @@
 # Imports
 import copy
 import os
+import csv
 
 
 # Creación de una función que convierte una casilla a ID y viceversa.
@@ -189,7 +190,7 @@ class Tablero:
                 casilla_inicio_notacion: str = ID_a_casilla(casilla_inicio)
                 casilla_llegada_notacion: str = ID_a_casilla(casilla_llegada)
                 movimiento: str = casilla_inicio_notacion + " " + casilla_llegada_notacion
-                self.partida.guardar_historial(movimiento, self.partida.ruta)
+                self.partida.guardar_historial(movimiento, self.partida.ruta_txt)
 
 
     def es_movimiento_valido(self, casilla_inicio: str, casilla_llegada: str, ignorar_estado: bool = False) -> bool:
@@ -482,13 +483,14 @@ class Rey(Pieza):
 # Creacion de la clase Partida
 class Partida:
 
-    def __init__(self, ruta: str = "partida.txt") -> None:
+    def __init__(self, ruta_txt: str = "partida.txt", ruta_csv: str = "partida.csv") -> None:
         """ Definicion de los atributos de la clase Partida. La ruta se establece por defecto a "partida.txt". """
 
         self.movimientos: list[str] = []
         self.estado: str = "turno_blancas"
         self.tablero = Tablero(self)
-        self.ruta = ruta             # La ruta esta hardcodeada por los requisitos de la entrega, pero la pongo como atributo para poder cambiarla facilmente
+        self.ruta_txt: str = ruta_txt             # La ruta esta hardcodeada a "partida.txt" por los requisitos de la entrega, pero la pongo como atributo para poder cambiarla facilmente
+        self.ruta_csv: str = ruta_csv
 
 
     def reiniciar(self) -> None:
@@ -532,9 +534,8 @@ class Partida:
                 print("Turno de las blancas.")
 
                 try:    
-                    self.ejecutar_turno()
 
-                    if self.estado == "turno_blancas":
+                    if self.ejecutar_turno() == True and self.estado == "turno_blancas":
                         self.estado = "turno_negras"
 
                 except ValueError as error:
@@ -544,27 +545,31 @@ class Partida:
                 print("Turno de las negras.")
 
                 try:
-                    self.ejecutar_turno()
 
-                    if self.estado == "turno_negras":
+                    if self.ejecutar_turno() == True and self.estado == "turno_negras":
                         self.estado = "turno_blancas"
 
                 except ValueError as error:
                     print(error)
 
 
-    def ejecutar_turno(self) -> bool | str:
+    def ejecutar_turno(self) -> bool | None:
         """ Pregunta al jugador por el movimiento y comprueba que es válida la sintaxis del input. """
 
         user_input: str = ""
         casilla_inicio: str = ""
         casilla_llegada: str = ""
 
-        user_input = input("Introduce un movimiento valido o escribe 'salir' para finalizar: ").lower()
+        user_input = input("Introduce un movimiento valido, escribe 'salir' para finalizar o 'exportar' para generar un archivo csv: ").lower()
         print("")
 
-        if "salir" == user_input:
+        if user_input == "salir":
             self.estado = "fin_partida"
+            return False
+
+        elif user_input == "exportar":
+            self.exportar_historial_csv(self.ruta_csv)
+            return False
 
         elif len(user_input) == 5 and user_input[0] in letras_perm and user_input[1] in numeros_perm and user_input[2] == " " and user_input[3] in letras_perm and user_input[4] in numeros_perm:
             casilla_inicio = casilla_a_ID(user_input[0:2])
@@ -572,16 +577,17 @@ class Partida:
             self.tablero.mover_pieza(casilla_inicio, casilla_llegada, indexar_movimiento = True)
             print("")
             self.tablero.imprimir_tablero()
+            return True
 
         else:
             raise ValueError("Formato no valido. Escribe origen y destino, por ejemplo: e2 e4")
 
 
-    def cargar_historial(self, ruta: str) -> None:
+    def cargar_historial(self, ruta_txt: str) -> None:
         """ Busca el archivo seleccionado e intenta cargar la partida """
 
         numero_movimientos: int = 0
-        with open(ruta, "r") as archivo:
+        with open(ruta_txt, "r") as archivo:
             movimientos: list[str] = archivo.readlines()
             
             for movimiento in movimientos:
@@ -625,19 +631,48 @@ class Partida:
             self.estado = "turno_negras"
 
 
-    def guardar_historial(self, movimiento: str, ruta: str) -> None:
+    def guardar_historial(self, movimiento: str, ruta_txt: str) -> None:
         """ Guarda cierto movimiento en la lista del historial de la partida y actualiza el archivo txt correspondiente. """
 
         self.movimientos.append(movimiento)
-        with open(ruta, "w") as archivo:
+        with open(ruta_txt, "w") as archivo:
             for movimiento in self.movimientos:
                 archivo.write(movimiento + "\n")
+
+
+    def exportar_historial_csv(self, ruta_csv: str) -> None:
+        """ Genera un archivo con la informacion de todos los movimientos de la partida (numero de turno, jugador que mueve, casilla de origen y casilla de destino) en formato csv. """
+
+        with open(ruta_csv, "w", newline = "") as archivo:
+            escritor = csv.writer(archivo)
+            numero_movimiento: int = 1
+            turno: str = "blancas"
+            casilla_inicio: str = ""
+            casilla_llegada: str = ""
+
+            escritor.writerow(["numero", "turno", "origen", "destino"])
+            for movimiento in self.movimientos:
+
+                if numero_movimiento % 2 == 1:
+                    turno = "blancas"
+                else:
+                    turno = "negras"
+
+                casilla_inicio = movimiento[0:2]
+                casilla_llegada = movimiento[3:5]
+
+                escritor.writerow([numero_movimiento, turno, casilla_inicio, casilla_llegada])
+                
+                numero_movimiento += 1
+
+        print("Partida exportada con éxito.")
+
 
 
     def iniciar_juego(self) -> None:
         """ Comprueba que el archivo existe y pregunta por la continuacion de la partida. """
 
-        ruta: str = self.ruta
+        ruta: str = self.ruta_txt
         if os.path.exists(ruta):
 
             user_input: str = input("Se ha detectado una partida existente. Si desea cargarla, introduzca 's': ").lower()
